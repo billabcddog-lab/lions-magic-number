@@ -1,60 +1,61 @@
 import streamlit as st
 import requests
 
-# 1. 網頁標題與外觀設定
-st.set_page_config(page_title="攻城獅預測觀測站", page_icon="🦁", layout="wide")
+# 1. 網頁標題設定
+st.set_page_config(page_title="攻城獅晉級預測", page_icon="🦁", layout="wide")
 st.title("🦁 攻城獅晉級預測戰情室")
 
-# 2. 定義 API 路徑
-STANDINGS_API = "https://api.tpbl.basketball/api/divisions/9/games/standings"
-SCHEDULE_API = "https://api.tpbl.basketball/api/divisions/9/games" # 假設的賽程路徑
+# 2. API 設定 (請在網頁側邊欄確認網址)
+DEFAULT_STANDINGS_API = "https://api.tpbl.basketball/api/divisions/9/games/standings"
+# 建議檢查網址是否包含日期，例如 ?date=2025-10-11
+DEFAULT_SCHEDULE_API = "https://api.tpbl.basketball/api/divisions/9/games" 
+
+st.sidebar.header("📡 API 連線設定")
+standings_url = st.sidebar.text_input("戰績 API 網址", DEFAULT_STANDINGS_API)
+schedule_url = st.sidebar.text_input("賽程 API 網址", DEFAULT_SCHEDULE_API)
+
 headers = {"User-Agent": "Mozilla/5.0"}
 
-def fetch_data():
+@st.cache_data(ttl=600) # 快取資料 10 分鐘，避免頻繁請求被封鎖
+def fetch_data(s_url, g_url):
     try:
-        # 1. 嘗試抓取戰績 📡
-        standings_resp = requests.get(STANDINGS_API, headers=headers)
-        standings_resp.raise_for_status() 
-        standings_data = standings_resp.json()
-        
-        # 2. 嘗試抓取賽程 📅
-        schedule_resp = requests.get(SCHEDULE_API, headers=headers)
-        schedule_resp.raise_for_status()
-        schedule_data = schedule_resp.json()
-        
-        return standings_data, schedule_data
+        s_resp = requests.get(s_url, headers=headers)
+        s_resp.raise_for_status()
+        g_resp = requests.get(g_url, headers=headers)
+        g_resp.raise_for_status()
+        return s_resp.json(), g_resp.json()
     except Exception as e:
-        # 在網頁上顯示真正的「病因」 🩺
-        st.warning(f"偵錯資訊：{e}")
+        st.sidebar.error(f"連線失敗：{e}")
         return None, None
 
-standings, schedule = fetch_data()
+standings, schedule = fetch_data(standings_url, schedule_url)
 
-if standings:
+if standings and schedule:
     # --- A. 側邊欄：預測模式控制 ---
-    st.sidebar.header("🛠️ 預測模式")
-    prediction_mode = st.sidebar.toggle("開啟預測模式")
+    st.sidebar.divider()
+    st.sidebar.header("🔮 預測模式")
+    prediction_mode = st.sidebar.toggle("開啟預測功能")
     
-    # 建立一個紀錄預測勝場的字典
     extra_wins = {team['team']['name']: 0 for team in standings}
     extra_losses = {team['team']['name']: 0 for team in standings}
 
     if prediction_mode:
-        st.sidebar.info("請在下方選擇未來場次的勝方：")
+        st.sidebar.info("請點選下方未來場次的勝方：")
+        # 篩選狀態為 NOT_STARTED 的比賽
+        upcoming_games = [g for g in schedule if g.get('status') == 'NOT_STARTED']
         
-        # 篩選出尚未開始的比賽 (範例：狀態為 upcoming 或比分皆為 0)
-        upcoming_games = [g for g in schedule if g.get('status') == 'upcoming' or g.get('score_home') == 0][:10] # 取前10場
+        if not upcoming_games:
+            st.sidebar.warning("目前沒有尚未開始的比賽資料。")
         
-        for idx, game in enumerate(upcoming_games):
-            home = game['team_home']['name']
-            away = game['team_away']['name']
-            date = game.get('start_time', '未知時間')[:10]
+        for idx, game in enumerate(upcoming_games[:15]): # 顯示接下來 15 場
+            home = game['home_team']['name']
+            away = game['away_team']['name']
+            date = game.get('game_date', '未知日期')
             
-            # 讓使用者選勝方
             winner = st.sidebar.radio(
                 f"📅 {date}：{home} vs {away}",
-                ["尚未決定", home, away],
-                key=f"game_{idx}"
+                ["未定", home, away],
+                key=f"predict_{idx}"
             )
             
             if winner == home:
@@ -66,39 +67,34 @@ if standings:
 
     # --- B. 核心邏輯計算 ---
     total_games = 36
+    processed_teams = []
     lions_wins = 0
     lions_raw_data = None
-    processed_teams = []
 
-    # 將原始戰績加上預測戰績
     for team in standings:
         name = team['team']['name']
-        w = team['score_won_matches'] + extra_wins[name]
-        l = team['score_lost_matches'] + extra_losses[name]
+        # 加上預測的勝負
+        w = team['score_won_matches'] + extra_wins.get(name, 0)
+        l = team['score_lost_matches'] + extra_losses.get(name, 0)
         rate = w / (w + l) if (w + l) > 0 else 0
         
         processed_teams.append({
-            'name': name, 
-            'wins': w, 
-            'losses': l, 
-            'rate': rate,
-            'original_data': team # 保留原始資料供對戰優勢判斷
+            'name': name, 'wins': w, 'losses': l, 'rate': rate, 'orig': team
         })
         
         if "攻城獅" in name:
             lions_wins = w
             lions_raw_data = team
 
-    # 重新排序排名
+    # 排序
     ranked_teams = sorted(processed_teams, key=lambda x: x['rate'], reverse=True)
 
-    # --- C. 網頁顯示 ---
+    # --- C. 介面顯示 ---
     col1, col2 = st.columns(2)
     with col1:
-        st.metric(label="🦁 攻城獅預計勝場", value=f"{lions_wins} 勝", delta=extra_wins.get("新竹御頂攻城獅", 0))
+        st.metric("🦁 攻城獅預計勝場", f"{lions_wins} 勝", f"+{extra_wins.get('新竹御頂攻城獅', 0)} (預測)")
     with col2:
-        mode_text = "🔮 預測模式已開啟" if prediction_mode else "📊 目前真實戰績"
-        st.write(f"### 狀態：{mode_text}")
+        st.write(f"### 目前模式：{'🔮 預測中' if prediction_mode else '📊 真實戰績'}")
 
     st.divider()
 
@@ -110,31 +106,32 @@ if standings:
         if "攻城獅" in name:
             continue
         
-        # 對戰優勢判斷 (使用原始 API 資料)
-        tie_breaker_bonus = 1
-        tie_note = ""
+        # 對戰優勢
+        tie_breaker = 1
+        note = ""
         if lions_raw_data:
             for record in lions_raw_data.get('against_result', []):
                 if record['team']['name'] == name:
                     if record.get('score_won_matches', 0) > record.get('score_lost_matches', 0):
-                        tie_breaker_bonus = 0
-                        tie_note = " ⚖️"
+                        tie_breaker = 0
+                        note = " ⚖️"
         
-        # 計算魔術數字
-        m_number = total_games - lions_wins - team_info['losses'] + tie_breaker_bonus
+        m = total_games - lions_wins - team_info['losses'] + tie_breaker
         
+        # 標記第 4 名
         status = " ⭐" if i == 3 else ""
-        if i == 3: playoff_m = m_number
+        if i == 3: playoff_m = m
             
         table_data.append({
             "排名": i + 1,
-            "球隊": name + status + tie_note,
-            "勝-敗": f"{team_info['wins']}W - {team_info['losses']}L",
-            "魔術數字": f"M{max(0, m_number)}"
+            "球隊": name + status + note,
+            "戰績": f"{team_info['wins']}W - {team_info['losses']}L",
+            "淘汰數字": f"M{max(0, m)}"
         })
 
-    st.subheader(f"🔥 晉級季後賽門檻：M{max(0, playoff_m)}")
+    st.subheader(f"🔥 晉級季後賽關鍵數字：M{max(0, playoff_m)}")
     st.table(table_data)
 
 else:
-    st.error("無法連線至 TPBL API，請檢查網路或 API 位址。")
+    st.error("⚠️ 資料抓取失敗。請檢查側邊欄的 API 網址是否正確。")
+    st.info("💡 提示：請確保你在官網開發者工具中看到的網址與上方輸入框一致。")

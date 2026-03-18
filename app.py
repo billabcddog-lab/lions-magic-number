@@ -6,9 +6,9 @@ st.set_page_config(page_title="攻城獅晉級預測", page_icon="🦁", layout=
 st.title("🦁 攻城獅晉級預測戰情室")
 
 # 2. API 設定 (請在網頁側邊欄確認網址)
-DEFAULT_STANDINGS_API = "https://api.tpbl.basketball/api/divisions/9/games/standings"
+DEFAULT_SCHEDULE_API = "https://api.tpbl.basketball/api/seasons/2/games"
 # 建議檢查網址是否包含日期，例如 ?date=2025-10-11
-DEFAULT_SCHEDULE_API = "https://api.tpbl.basketball/api/divisions/9/games" 
+DEFAULT_STANDINGS_API = "https://api.tpbl.basketball/api/divisions/9/games/standings"
 
 st.sidebar.header("📡 API 連線設定")
 standings_url = st.sidebar.text_input("戰績 API 網址", DEFAULT_STANDINGS_API)

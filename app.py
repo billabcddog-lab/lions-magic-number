@@ -12,24 +12,27 @@ headers = {"User-Agent": "Mozilla/5.0"}
 try:
     response = requests.get(api_url, headers=headers)
     data = response.json()
-    teams_list = data
+    teams_list = data  # API 直接回傳清單
 
-    # 3. 資料處理與排序
+    # 3. 資料處理
     total_games = 36
     lions_wins = 0
+    lions_raw_data = None
     processed_teams = []
 
-    # 先找出攻城獅勝場
+    # 先找出攻城獅的數據與原始對戰紀錄
     for team in teams_list:
         name = team['team']['name']
         w = team['score_won_matches']
         l = team['score_lost_matches']
         rate = w / (w + l) if (w + l) > 0 else 0
         processed_teams.append({'name': name, 'wins': w, 'losses': l, 'rate': rate})
+        
         if "攻城獅" in name:
             lions_wins = w
+            lions_raw_data = team
 
-    # 依勝率排序
+    # 依勝率排序 (目前排名)
     ranked_teams = sorted(processed_teams, key=lambda x: x['rate'], reverse=True)
 
     # 4. 顯示目前概況
@@ -40,12 +43,29 @@ try:
     table_data = []
     playoff_m = "N/A"
     
-    for i, team in enumerate(ranked_teams):
-        if "攻城獅" in team['name']:
+    for i, team_info in enumerate(ranked_teams):
+        if "攻城獅" in team_info['name']:
             continue
         
-        # 計算魔術數字 (目前預設都有對戰優勢，所以不加1；若要保險可加1)
-        m_number = total_games - lions_wins - team['losses'] + 1
+        # --- 自動對戰優勢判斷 ---
+        tie_breaker_bonus = 1 # 預設需要比對方多 1 勝才能超越
+        tie_note = ""
+        
+        if lions_raw_data:
+            # 在攻城獅的 against_result 中尋找與該隊的對戰紀錄
+            for record in lions_raw_data.get('against_result', []):
+                if record['team']['name'] == team_info['name']:
+                    h2h_wins = record.get('score_won_matches', 0)
+                    h2h_losses = record.get('score_lost_matches', 0)
+                    
+                    # 如果對戰勝場多於敗場 -> 擁有對戰優勢，平手也算贏，所以不需 +1
+                    if h2h_wins > h2h_losses:
+                        tie_breaker_bonus = 0
+                        tie_note = " (具對戰優勢 ⚖️)"
+                    break
+        
+        # 計算公式：總場數 - 我方勝 - 對方敗 + (1或0)
+        m_number = total_games - lions_wins - team_info['losses'] + tie_breaker_bonus
         
         # 標記季後賽門檻 (第4名)
         status = ""
@@ -55,8 +75,8 @@ try:
             
         table_data.append({
             "排名": i + 1,
-            "球隊名稱": team['name'] + status,
-            "勝/敗": f"{team['wins']}W - {team['losses']}L",
+            "球隊名稱": team_info['name'] + status + tie_note,
+            "勝/敗": f"{team_info['wins']}W - {team_info['losses']}L",
             "魔術數字": f"M{max(0, m_number)}"
         })
 
@@ -64,7 +84,4 @@ try:
     st.table(table_data)
 
 except Exception as e:
-    st.error(f"偵錯訊息：{e}")
-    # 這行會把 API 抓到的內容印出來，幫我們判斷是哪裡出錯
-    if 'response' in locals():
-        st.write("API 回應內容：", response.text[:500])
+    st.error(f"發生錯誤：{e}")

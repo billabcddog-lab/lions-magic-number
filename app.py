@@ -23,6 +23,7 @@ def fetch_data(s_url, g_url):
         s_resp.raise_for_status()
         g_resp = requests.get(g_url, headers=headers)
         g_resp.raise_for_status()
+        st.write(f"目前的 playoff_m 內容是：{playoff_m}，類型是：{type(playoff_m)}")
         # 在 s_resp.json() 之前，先看看抓到了什麼
         st.write("戰績原始內容：", s_resp.text[:100]) # 印出前 100 個字
         st.write("賽程原始內容：", g_resp.text[:100])

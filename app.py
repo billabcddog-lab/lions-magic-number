@@ -12,17 +12,20 @@ headers = {"User-Agent": "Mozilla/5.0"}
 
 def fetch_data():
     try:
-        # 抓取戰績
+        # 1. 嘗試抓取戰績 📡
         standings_resp = requests.get(STANDINGS_API, headers=headers)
+        standings_resp.raise_for_status() 
         standings_data = standings_resp.json()
         
-        # 抓取賽程 (這裡先模擬抓取接下來的比賽)
-        # 註：若 API 不同，此處邏輯需微調
+        # 2. 嘗試抓取賽程 📅
         schedule_resp = requests.get(SCHEDULE_API, headers=headers)
+        schedule_resp.raise_for_status()
         schedule_data = schedule_resp.json()
         
         return standings_data, schedule_data
-    except:
+    except Exception as e:
+        # 在網頁上顯示真正的「病因」 🩺
+        st.warning(f"偵錯資訊：{e}")
         return None, None
 
 standings, schedule = fetch_data()

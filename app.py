@@ -12,7 +12,7 @@ headers = {"User-Agent": "Mozilla/5.0"}
 try:
     response = requests.get(api_url, headers=headers)
     data = response.json()
-    teams_list = data['data']
+    teams_list = data
 
     # 3. 資料處理與排序
     total_games = 36

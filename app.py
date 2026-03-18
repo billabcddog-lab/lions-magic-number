@@ -64,4 +64,7 @@ try:
     st.table(table_data)
 
 except Exception as e:
-    st.error("暫時無法抓取最新戰績，請稍後再試。")
+    st.error(f"偵錯訊息：{e}")
+    # 這行會把 API 抓到的內容印出來，幫我們判斷是哪裡出錯
+    if 'response' in locals():
+        st.write("API 回應內容：", response.text[:500])

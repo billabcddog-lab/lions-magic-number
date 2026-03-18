@@ -40,12 +40,14 @@ if standings and schedule:
 
     if prediction_mode:
         st.sidebar.info("請點選下方未來場次的勝方：")
+        # 篩選所有尚未開始的比賽
         upcoming_games = [g for g in schedule if g.get('status') == 'NOT_STARTED']
         
         if not upcoming_games:
             st.sidebar.warning("目前沒有尚未開始的比賽資料。")
         
-        for idx, game in enumerate(upcoming_games[:15]): 
+        # 移除 [:15] 限制，列出所有剩餘賽程 (包含 4/8~5/3)
+        for idx, game in enumerate(upcoming_games): 
             home = game['home_team']['name']
             away = game['away_team']['name']
             date = game.get('game_date', '未知日期')
@@ -90,8 +92,7 @@ if standings and schedule:
 
     st.divider()
 
-    # 找出季後賽門檻基準 (第 4 或 第 5 名)
-    # 如果攻城獅在前 4，門檻就是跟第 5 名比；如果在 5 之後，門檻就是跟第 4 名比
+    # 找出季後賽門檻基準
     lions_rank = next(i for i, t in enumerate(ranked_teams) if "攻城獅" in t['name'])
     threshold_idx = 4 if lions_rank <= 3 else 3
     threshold_idx = min(threshold_idx, len(ranked_teams) - 1)
@@ -102,7 +103,7 @@ if standings and schedule:
     for i, team_info in enumerate(ranked_teams):
         name = team_info['name']
         
-        # 對戰優勢 ⚖️
+        # 對戰優勢判斷 ⚖️
         tie_breaker = 1
         note = ""
         if lions_raw_data:
@@ -112,10 +113,8 @@ if standings and schedule:
                         tie_breaker = 0
                         note = " ⚖️"
         
-        # 計算相對於攻城獅的魔術數字
         m_number = total_games - lions_wins - team_info['losses'] + tie_breaker
         
-        # 紀錄門檻數字
         if i == threshold_idx:
             playoff_m = m_number
             status = " ⭐ 晉級門檻"
